@@ -55,8 +55,6 @@ def parse_events(csv_bytes: bytes) -> pl.DataFrame:
     
     df = df.with_columns(
         pl.col("raw_date").str.to_date(format="%Y%m%d").alias("date"),
-        # When GDELT published the event (UTC). Unlike `date`, which is when the
-        # event happened, this is what was actually known at that moment.
         pl.col("date_added")
         .cast(pl.String)
         .str.to_datetime(format="%Y%m%d%H%M%S", time_zone="UTC"),
