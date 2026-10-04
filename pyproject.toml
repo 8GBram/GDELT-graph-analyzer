@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gdelt"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "polars",
+    "requests",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gdelt"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: hits the real GDELT servers (deselected by default)"]
+addopts = "-m 'not network'"
