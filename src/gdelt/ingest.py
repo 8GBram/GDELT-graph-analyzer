@@ -54,12 +54,17 @@ def parse_events(csv_bytes: bytes) -> pl.DataFrame:
     )
     
     df = df.with_columns(
-        pl.col("raw_date").str.to_date(format="%Y%m%d").alias("date")
+        pl.col("raw_date").str.to_date(format="%Y%m%d").alias("date"),
+        # When GDELT published the event (UTC). Unlike `date`, which is when the
+        # event happened, this is what was actually known at that moment.
+        pl.col("date_added")
+        .cast(pl.String)
+        .str.to_datetime(format="%Y%m%d%H%M%S", time_zone="UTC"),
     )
-    
+
     df = df.select(
-        ["id", "date", 
-         "actor1_country_code", "actor2_country_code", 
+        ["id", "date", "date_added",
+         "actor1_country_code", "actor2_country_code",
          "event_code", "event_base_code", "event_root_code",
          "quad_class", "goldstein_scale",
          "num_mentions", "num_sources", "num_articles",

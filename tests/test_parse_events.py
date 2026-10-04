@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 import polars as pl
 
@@ -6,7 +6,7 @@ from gdelt.ingest import parse_events
 from tests.conftest import make_row
 
 EXPECTED_COLUMNS = [
-    "id", "date",
+    "id", "date", "date_added",
     "actor1_country_code", "actor2_country_code",
     "event_code", "event_base_code", "event_root_code",
     "quad_class", "goldstein_scale",
@@ -36,6 +36,7 @@ def test_drops_merz_row_with_missing_actor1(sample_bytes):
 def test_column_types(sample_bytes):
     schema = parse_events(sample_bytes).schema
     assert schema["date"] == pl.Date
+    assert schema["date_added"] == pl.Datetime(time_zone="UTC")
     assert schema["event_code"] == pl.String
     assert schema["goldstein_scale"] == pl.Float64
     assert schema["avg_tone"] == pl.Float64
@@ -45,6 +46,11 @@ def test_column_types(sample_bytes):
 def test_parses_date(sample_bytes):
     df = parse_events(sample_bytes)
     assert df["date"][0] == date(2026, 10, 4)
+
+
+def test_parses_date_added_as_utc(sample_bytes):
+    df = parse_events(sample_bytes)
+    assert df["date_added"][0] == datetime(2026, 10, 4, 8, 0, tzinfo=timezone.utc)
 
 
 def test_keeps_leading_zeros_in_event_codes():
