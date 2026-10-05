@@ -7,10 +7,33 @@ from zipfile import ZipFile
 import polars as pl
 import requests
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry 
+
 from gdelt.logger import logger
 from gdelt.config import GDELT_SCHEMA
 from gdelt.tracker import IngestTracker
 
+def _make_session(pool_size: int = 16) -> requests.session:
+    """
+    A session that reuses connections and retries temporary server errors.
+    """
+    
+    retry = Retry(
+        total = 5,
+        backoff_factor = 1, #waits ~1s, 2s, 4s, 8s, 16s
+        status_forcelist = [429, 500, 502, 503, 504], # missing files not retried
+        allowed_methods = ["GET"],
+        raise_on_status = False, #after last retry, return response
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_maxsize=pool_size)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+_session = _make_session()
+    
 def download_export(timestamp: str) -> bytes | None:
     """
     Returns unzipped CSV bytes of exports.CSV.zip for that timestamp
@@ -22,7 +45,7 @@ def download_export(timestamp: str) -> bytes | None:
     
     url = f"https://data.gdeltproject.org/gdeltv2/{timestamp}.export.CSV.zip"
     
-    response = requests.get(url, timeout=30)
+    response = _session.get(url, timeout=30)
     if response.status_code == 404:
         logger.warning("Export %s not available (404)", timestamp)
         return None

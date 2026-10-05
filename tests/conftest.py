@@ -63,7 +63,7 @@ class FakeGdelt:
 @pytest.fixture
 def fake_gdelt(monkeypatch) -> FakeGdelt:
     fake = FakeGdelt()
-    monkeypatch.setattr(ingest.requests, "get", fake.get)
+    monkeypatch.setattr(ingest._session, "get", fake.get) 
     return fake
 
 

@@ -16,7 +16,7 @@ def fake_get(monkeypatch):
             calls.append((url, kwargs))
             return response
 
-        monkeypatch.setattr(ingest.requests, "get", get)
+        monkeypatch.setattr(ingest._session, "get", get)
         return calls
 
     return install
