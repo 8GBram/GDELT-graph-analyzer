@@ -24,7 +24,7 @@ def download_export(timestamp: str) -> bytes | None:
     
     response = requests.get(url, timeout=30)
     if response.status_code == 404:
-        logger.error("File Not Found")
+        logger.warning("Export %s not available (404)", timestamp)
         return None
     
     if response.status_code != 200:
