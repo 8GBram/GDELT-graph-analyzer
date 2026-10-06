@@ -1,7 +1,9 @@
+from datetime import date, datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
+import polars as pl
 import pytest
 import requests
 
@@ -65,6 +67,54 @@ def fake_gdelt(monkeypatch) -> FakeGdelt:
     fake = FakeGdelt()
     monkeypatch.setattr(ingest._session, "get", fake.get) 
     return fake
+
+
+# --- parsed events (the output of parse_events) -------------------------------
+
+# Same columns and types that parse_events produces.
+EVENT_SCHEMA = {
+    "id": pl.String,
+    "date": pl.Date,
+    "date_added": pl.Datetime("us", "UTC"),
+    "actor1_country_code": pl.String,
+    "actor2_country_code": pl.String,
+    "event_code": pl.String,
+    "event_base_code": pl.String,
+    "event_root_code": pl.String,
+    "quad_class": pl.Int32,
+    "goldstein_scale": pl.Float64,
+    "num_mentions": pl.Int32,
+    "num_sources": pl.Int32,
+    "num_articles": pl.Int32,
+    "avg_tone": pl.Float64,
+}
+
+PUBLISHED = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+
+
+def event(id: str, a1: str | None, a2: str | None, *,
+          happened: date = date(2026, 10, 3),
+          published: datetime = PUBLISHED,
+          **overrides) -> dict:
+    """One event row. By default: happened and published on the same day.
+
+    Any other column can be set by name, e.g. event("1", "DEU", "UKR", quad_class=4).
+    """
+    row = {
+        "id": id, "date": happened, "date_added": published,
+        "actor1_country_code": a1, "actor2_country_code": a2,
+        "event_code": "042", "event_base_code": "042", "event_root_code": "04",
+        "quad_class": 1, "goldstein_scale": 1.9,
+        "num_mentions": 2, "num_sources": 1, "num_articles": 2,
+        "avg_tone": -2.4,
+    }
+    unknown = set(overrides) - set(row)
+    assert not unknown, f"unknown columns: {unknown}"
+    return row | overrides
+
+
+def events(*rows: dict) -> pl.DataFrame:
+    return pl.DataFrame(list(rows), schema=EVENT_SCHEMA)
 
 
 @pytest.fixture

@@ -136,9 +136,6 @@ def ingest_day(day: date,
     If a tracker is given, the outcome of every timestamp is recorded in it.
     """
     
-    frames = []
-    errors = []
-    
     path = out_dir / f"{day.isoformat()}.parquet"
     if path.exists():
         logger.info("Skipping %s, already ingested", day)
@@ -147,8 +144,9 @@ def ingest_day(day: date,
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         results = list(pool.map(_fetch, day_timestamps(day)))
 
-    # Record every outcome here in the main thread: a SQLite connection
-    # can only be used from the thread that created it.
+    # Collect every outcome
+    frames = []
+    errors = []
     records: list[ExportRecord] = []
     for timestamp, csv_bytes, error in results:
         if error is not None:
@@ -163,7 +161,8 @@ def ingest_day(day: date,
             status, rows = "ok", frame.height
 
         records.append(ExportRecord(timestamp, status, rows))
-        
+
+    #outcomes saved here
     if tracker is not None:
         tracker.record_many(records)
 

@@ -4,44 +4,7 @@ import polars as pl
 import pytest
 
 from gdelt.clean import clean_events
-
-# Same columns and types that parse_events produces.
-EVENT_SCHEMA = {
-    "id": pl.String,
-    "date": pl.Date,
-    "date_added": pl.Datetime("us", "UTC"),
-    "actor1_country_code": pl.String,
-    "actor2_country_code": pl.String,
-    "event_code": pl.String,
-    "event_base_code": pl.String,
-    "event_root_code": pl.String,
-    "quad_class": pl.Int32,
-    "goldstein_scale": pl.Float64,
-    "num_mentions": pl.Int32,
-    "num_sources": pl.Int32,
-    "num_articles": pl.Int32,
-    "avg_tone": pl.Float64,
-}
-
-PUBLISHED = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
-
-
-def event(id: str, a1: str | None, a2: str | None, *,
-          happened: date = date(2026, 10, 3),
-          published: datetime = PUBLISHED) -> dict:
-    """One event row. By default: happened and published on the same day."""
-    return {
-        "id": id, "date": happened, "date_added": published,
-        "actor1_country_code": a1, "actor2_country_code": a2,
-        "event_code": "042", "event_base_code": "042", "event_root_code": "04",
-        "quad_class": 1, "goldstein_scale": 1.9,
-        "num_mentions": 2, "num_sources": 1, "num_articles": 2,
-        "avg_tone": -2.4,
-    }
-
-
-def events(*rows: dict) -> pl.DataFrame:
-    return pl.DataFrame(list(rows), schema=EVENT_SCHEMA)
+from tests.conftest import EVENT_SCHEMA, event, events
 
 
 def kept_ids(df: pl.DataFrame, **kwargs) -> list[str]:
@@ -153,3 +116,16 @@ def test_all_rules_together():
         event("timor", "TMP", "AUS"),
     )
     assert kept_ids(df) == ["keep", "timor"]
+
+
+# --- lazy frames (Fix 4) ------------------------------------------------------
+
+def test_accepts_a_lazyframe_and_returns_one():
+    df = events(
+        event("keep", "DEU", "UKR"),
+        event("region", "EUR", "RUS"),
+        event("self", "USA", "USA"),
+    )
+    out = clean_events(df.lazy())
+    assert isinstance(out, pl.LazyFrame)
+    assert out.collect().equals(clean_events(df))

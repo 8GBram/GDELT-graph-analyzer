@@ -1,3 +1,5 @@
+from typing import TypeVar
+
 import polars as pl
 import pycountry
 
@@ -12,9 +14,11 @@ CAMEO_TO_ISO: dict[str, str] = {
 
 ACTOR_COLUMNS = ("actor1_country_code", "actor2_country_code")
 
+PLFrame = TypeVar("PL_Frame", pl.DataFrame, pl.LazyFrame)
 
-def clean_events(df: pl.DataFrame,
-                  max_lag_days: int = 3) -> pl.DataFrame:
+
+def clean_events(df: PLFrame,
+                  max_lag_days: int = 3) -> PLFrame:
     """
     Keep only events that make sense as edges between two countries:
       - both actors are real countries (old CAMEO codes renamed to ISO first)
@@ -23,6 +27,7 @@ def clean_events(df: pl.DataFrame,
         which drops retrospective "a year ago today..." articles
 
     Only rows are removed; columns and types are unchanged.
+    Works on a DataFrame or a LazyFrame and returns the same kind
     """
     actor1, actor2 = (pl.col(name) for name in ACTOR_COLUMNS)
     lag_days = (pl.col("date_added").dt.date() - pl.col("date")).dt.total_days()
