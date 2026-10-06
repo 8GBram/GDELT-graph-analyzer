@@ -1,8 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from io import BytesIO
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 import polars as pl
 import requests
@@ -178,11 +179,21 @@ def ingest_day(day: date,
     logger.info("Wrote %s (%d of %d exports)", path.name, len(frames), len(results))
     return path
 
+@dataclass
+class IngestResult:
+    written: list[Path] = field(default_factory=list) #day files written or present
+    empty: list[date] = field(default_factory=list) #no exports for that day
+    failed: list[date] = field(default_factory=list) #errors: retried on the next run
+    
+    @property
+    def ok(self) -> bool:
+        return not self.failed
+
 def ingest_range(start: date,
                  end: date,
                  out_dir: Path,
                  max_workers: int = 8,
-                 tracker: IngestTracker | None = None) -> list[Path]:
+                 tracker: IngestTracker | None = None) -> IngestResult:
 
     """
     Runs ingest_day for every day from start to end (inclusive)
@@ -195,13 +206,24 @@ def ingest_range(start: date,
     if end >= today:
         raise ValueError(f"end ({end}) must be before today in UTC ({today})")
 
-    paths = []
+    result = IngestResult()
     day = start
     while day <= end:
-        path = ingest_day(day, out_dir, max_workers, tracker=tracker)
-        if path is not None:
-            paths.append(path)
+        try:
+            path = ingest_day(day, out_dir, max_workers, tracker=tracker)
+        except (requests.RequestException, BadZipFile) as e:
+            # No file was written for this day, so the next run retries it.
+            logger.error("Day %s failed: %s", day, e)
+            result.failed.append(day)
+        else:
+            if path is None:
+                result.empty.append(day)
+            else:
+                result.written.append(path)
         day += timedelta(days=1)
 
-    return paths
+    if result.failed:
+        logger.error("%d day(s) failed: %s", len(result.failed), ", ".join(map(str, result.failed)))
+    return result
+
     

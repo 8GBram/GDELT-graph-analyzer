@@ -3,8 +3,6 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-import requests
-
 from gdelt.ingest import ingest_range
 from gdelt.logger import logger
 from gdelt.tracker import IngestTracker
@@ -40,18 +38,18 @@ def run_ingest(args: argparse.Namespace) -> int:
 
     tracker = IngestTracker(args.data_dir / "ingest.db")
     try:
-        paths = ingest_range(start, end, args.data_dir / "events", args.workers, tracker=tracker)
-    except ValueError as e:          # bad range: start after end, or a day that isn't over yet
+        result = ingest_range(start, end, 
+                              args.data_dir / "events", 
+                              args.workers, tracker=tracker)
+    except ValueError as e:   # bad range: start after end, or a day that isn't over yet
         logger.error("%s", e)
         return 2
-    except requests.RequestException as e:
-        logger.error("Ingest stopped: %s", e)
-        return 1
     finally:
         tracker.close()
 
-    logger.info("Done: %d day file(s) in %s", len(paths), args.data_dir / "events")
-    return 0
+    logger.info("Done: %d written, %d empty, %d failed",
+                len(result.written), len(result.empty), len(result.failed))
+    return 0 if result.ok else 1
 
 
 def main(argv: list[str] | None = None) -> int:

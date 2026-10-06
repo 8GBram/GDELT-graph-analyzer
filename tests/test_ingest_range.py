@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+import requests
 
 from gdelt import ingest
 
@@ -24,9 +25,9 @@ def fake_ingest_day(monkeypatch):
 
 def test_calls_ingest_day_for_each_day_inclusive(fake_ingest_day, tmp_path):
     calls, _ = fake_ingest_day
-    paths = ingest.ingest_range(date(2026, 9, 1), date(2026, 9, 3), tmp_path)
+    result = ingest.ingest_range(date(2026, 9, 1), date(2026, 9, 3), tmp_path)
     assert calls == [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3)]
-    assert paths == [
+    assert result.written == [
         tmp_path / "2026-09-01.parquet",
         tmp_path / "2026-09-02.parquet",
         tmp_path / "2026-09-03.parquet",
@@ -42,9 +43,10 @@ def test_single_day_range(fake_ingest_day, tmp_path):
 def test_leaves_out_days_without_data(fake_ingest_day, tmp_path):
     _, empty_days = fake_ingest_day
     empty_days.add(date(2026, 9, 2))
-    paths = ingest.ingest_range(date(2026, 9, 1), date(2026, 9, 3), tmp_path)
-    assert paths == [tmp_path / "2026-09-01.parquet", tmp_path / "2026-09-03.parquet"]
-
+    result = ingest.ingest_range(date(2026, 9, 1), date(2026, 9, 3), tmp_path)
+    assert result.written == [tmp_path / "2026-09-01.parquet", tmp_path / "2026-09-03.parquet"]
+    
+    assert result.empty == [date(2026, 9, 2)]
 
 def test_refuses_unfinished_day(fake_ingest_day, tmp_path):
     # Today (UTC) isn't over: ingesting it would save a partial day that is never filled in.
@@ -58,3 +60,16 @@ def test_refuses_unfinished_day(fake_ingest_day, tmp_path):
 def test_refuses_start_after_end(fake_ingest_day, tmp_path):
     with pytest.raises(ValueError):
         ingest.ingest_range(date(2026, 9, 3), date(2026, 9, 1), tmp_path)
+
+def test_keeps_going_after_a_failed_day(monkeypatch, tmp_path):
+    def fake(day, out_dir, *args, **kwargs):
+        if day == date(2026, 9, 2):
+            raise requests.HTTPError("503 Error")
+        return out_dir / f"{day.isoformat()}.parquet"
+
+    monkeypatch.setattr(ingest, "ingest_day", fake)
+    result = ingest.ingest_range(date(2026, 9, 1), date(2026, 9, 3), tmp_path)
+
+    assert result.written == [tmp_path / "2026-09-01.parquet", tmp_path / "2026-09-03.parquet"]
+    assert result.failed == [date(2026, 9, 2)]
+    assert not result.ok
