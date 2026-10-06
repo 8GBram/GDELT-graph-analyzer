@@ -13,7 +13,7 @@ from urllib3.util.retry import Retry
 
 from gdelt.logger import logger
 from gdelt.config import GDELT_SCHEMA
-from gdelt.tracker import IngestTracker
+from gdelt.tracker import IngestTracker, ExportRecord
 
 def _make_session(pool_size: int = 16) -> requests.Session:
     """
@@ -135,6 +135,10 @@ def ingest_day(day: date,
     Skips the download if that file already exists. Returns the path, or None if no data was found.
     If a tracker is given, the outcome of every timestamp is recorded in it.
     """
+    
+    frames = []
+    errors = []
+    
     path = out_dir / f"{day.isoformat()}.parquet"
     if path.exists():
         logger.info("Skipping %s, already ingested", day)
@@ -145,8 +149,7 @@ def ingest_day(day: date,
 
     # Record every outcome here in the main thread: a SQLite connection
     # can only be used from the thread that created it.
-    frames = []
-    errors = []
+    records: list[ExportRecord] = []
     for timestamp, csv_bytes, error in results:
         if error is not None:
             status, rows = "failed", None
@@ -159,8 +162,10 @@ def ingest_day(day: date,
             frames.append(frame)
             status, rows = "ok", frame.height
 
-        if tracker is not None:
-            tracker.record(timestamp, status, rows)
+        records.append(ExportRecord(timestamp, status, rows))
+        
+    if tracker is not None:
+        tracker.record_many(records)
 
     # Raise before writing anything, so a failed day leaves no file behind
     # and is retried on the next run.

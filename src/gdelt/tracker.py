@@ -1,9 +1,17 @@
 import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 STATUSES = ("ok", "missing", "failed")
 
+
+class ExportRecord(NamedTuple):
+    timestamp: str
+    status: str
+    rows: int | None = None
+    
+    
 class IngestTracker:
     """Records the outcome of every export timestamp in a small SQLite database."""
 
@@ -39,6 +47,31 @@ class IngestTracker:
             (timestamp, status, rows, datetime.now(timezone.utc).isoformat()),
         )
         self.conn.commit()
+        
+    def record_many(self, records: list[ExportRecord]) -> None:
+        rows = []
+        fetched_at = datetime.now(timezone.utc).isoformat()
+        for row in records:
+            if row.status not in STATUSES:
+                raise ValueError(f"status must be one of {STATUSES}, got {row.status!r}")
+            rows.append((row.timestamp, 
+                         row.status, 
+                         row.rows, 
+                         fetched_at
+                        ))
+        with self.conn:
+            self.conn.executemany(
+                """
+                INSERT INTO exports (timestamp, status, rows, fetched_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(timestamp) DO UPDATE SET
+                    status = excluded.status,
+                    rows = excluded.rows,
+                    fetched_at = excluded.fetched_at
+                """, 
+                rows
+            )
+
 
     def status(self, timestamp: str) -> str | None:
         row = self.conn.execute(
