@@ -14,7 +14,7 @@ from gdelt.logger import logger
 from gdelt.config import GDELT_SCHEMA
 from gdelt.tracker import IngestTracker
 
-def _make_session(pool_size: int = 16) -> requests.session:
+def _make_session(pool_size: int = 16) -> requests.Session:
     """
     A session that reuses connections and retries temporary server errors.
     """
